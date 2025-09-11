@@ -1,0 +1,7 @@
+/__pycache__
+/cifar-10-batches-py
+/cifar-10-python.tar.gz
+/data
+/model_data
+/tb_runs
+/venv
