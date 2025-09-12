@@ -23,7 +23,8 @@ class Trainer:
 
             # logging
             if self.handler:
-                self.handler.handle(epoch)
+                if self.handler.handle(epoch) == True:
+                    return
 
     def fit_epoch(self, loader, train: bool):
         self.model.train(train) # eval if false

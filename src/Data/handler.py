@@ -3,6 +3,8 @@ from torchmetrics.classification import Accuracy
 from torchmetrics import MeanAbsoluteError, ConfusionMatrix
 import optuna, torch
 
+from Data.early_stopper import EarlyStopper
+
 class ResultHandler:
     def __init__(self, n_classes, tb=False):
         self.tb = tb
@@ -11,19 +13,26 @@ class ResultHandler:
         self.conf_matrix = ConfusionMatrix(task="multiclass", num_classes=n_classes)
         self.mae = MeanAbsoluteError()
 
-        self.running_loss = 0.0
-        self.best_epoch = None
-        self.best_value = None
+        self.early_stopper = EarlyStopper(patience=5, min_delta=0)
+
+        self.reset_experiment()
 
     def reset_metrics(self):
         self.acc_metric.reset()
         self.conf_matrix.reset()
         self.mae.reset()
-        self.running_loss = 0
+        self.running_loss = 0.0
+
+    def reset_experiment(self):
+        self.best_epoch = None
+        self.best_value = None
+        self.early_stopper.reset()
             
     def set_expiriment(self, model=None, model_dir=None, trial=None):
         self.trial = trial
         self.model = model
+        
+        self.reset_experiment()
 
         # optional (for saving and logging)
         self.model = model
@@ -60,8 +69,20 @@ class ResultHandler:
     def handle(self, epoch):
         val_metric = self.v_loss
 
+        # logging
         print(f"Epoch {epoch} | train {self.t_loss:.4f}/{self.t_acc:.2%} | val {self.v_loss:.4f}/{self.v_acc:.2%}")
+        if self.writer:
+            self.tb_log_epoch(epoch)
 
+        # stopping / pruning
+        if self.early_stopper.early_stop(val_metric):
+            return True
+        if self.trial:
+            self.trial.report(val_metric, epoch)
+            if self.trial.should_prune():
+                raise optuna.TrialPruned()
+
+        # saving
         if self.is_better(val_metric):
             self.best_value = val_metric
             self.best_epoch = epoch
@@ -72,15 +93,7 @@ class ResultHandler:
 
             if self.trial:
                 self.trial.set_user_attr("best_path", best_path) 
-
-        if self.writer:
-            self.tb_log_epoch(epoch)
-
-        if self.trial:
-            self.trial.report(val_metric, epoch)
-
-            if self.trial.should_prune():
-                raise optuna.TrialPruned()
+        
 
     def tb_log_epoch(self, epoch):
         self.writer.add_scalar("loss/train", self.t_loss, epoch)
