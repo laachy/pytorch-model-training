@@ -32,8 +32,20 @@ class TrainedVGG(torch.nn.Module):
 
     def configure_optimisers(self):
         return torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+    
+    @classmethod
+    def transforms(cls):
+        return cls.weights.transforms()
 
     @classmethod
     def build_for_experiment(cls, output_size, trial=None):
         if not trial:
-            return cls(output_size)
+            batch_size = 32     # default
+            return cls(output_size), batch_size
+
+        batch_size = trial.suggest_int("batch_size", 16, 64, step=16)
+
+        lr = trial.suggest_float("lr", 5e-4, 3e-3, log=True)
+        weight_decay  = trial.suggest_float("weight_decay", 1e-6, 5e-4, log=True)
+    
+        return cls(output_size, lr, weight_decay), batch_size

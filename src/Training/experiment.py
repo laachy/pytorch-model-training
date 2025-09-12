@@ -1,10 +1,11 @@
 import optuna
 
 class Study:
-    def __init__(self, direction="minimize", sampler=None):
+    def __init__(self, study_name, direction="minimize", sampler=None):
         self.sh_pruner()
 
         self.study = optuna.create_study(
+            study_name=study_name,
             direction=direction, 
             sampler=sampler or optuna.samplers.TPESampler(seed=42), # sampler defines how hparams are chosen
             pruner=self.pruner
@@ -55,18 +56,18 @@ class Experiment:
 
             shutil.copyfile(best_path, dst)
 
-    def run(self, trial=None, batch_size=32):
+    def run(self, trial=None):
         try:
             tb_dir=f"{self.model_path}/tb/trial" 
             if trial:
-                batch_size = trial.suggest_int("batch_size", 32, 256, step=32)
                 tb_dir=f"{tb_dir}_{trial.number}"
                 
+            model, batch_size = self.model_cls.build_for_experiment(self.output_size, trial)    # create model
+
             # data retrieval and setup
             train_loader = self.dm.train_dataloader(batch_size)
             val_loader = self.dm.val_dataloader(batch_size)
 
-            model = self.model_cls.build_for_experiment(self.output_size, trial)    # create model
             self.handler.set_expiriment(model, tb_dir, trial)
             self.trainer.fit(model, train_loader, val_loader, self.epochs)  # train model
 
