@@ -7,7 +7,7 @@ class VGG(nn.Module):
     #ARCH = ((2, 64), (2, 128), (3, 256), (3, 512), (3, 512))    # VGG16 arch
     ARCH = ((1, 64), (1, 128), (2, 256), (2, 512), (2, 512))    # VGG11
 
-    def __init__(self, output_size, lr=1e-3, weight_decay=5e-4):
+    def __init__(self, output_size, fc_depth=4096, dropout=0.5, lr=1e-3, weight_decay=5e-4):
         super().__init__()
 
         layers = []
@@ -18,9 +18,9 @@ class VGG(nn.Module):
         # fully connected part
         layers += [
             nn.Flatten(),
-            nn.LazyLinear(4096), nn.ReLU(), nn.Dropout(0.5),
-            nn.Linear(4096, 4096), nn.ReLU(), nn.Dropout(0.5),
-            nn.Linear(4096, output_size)
+            nn.LazyLinear(fc_depth), nn.ReLU(), nn.Dropout(dropout),
+            nn.LazyLinear(fc_depth), nn.ReLU(), nn.Dropout(dropout),
+            nn.LazyLinear(output_size)
         ]
         self.net = nn.Sequential(*layers)
 
