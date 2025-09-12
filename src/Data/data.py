@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
 class DataModule:
-    def __init__(self, train_ds=None, val_ds=None, train_root=None, val_root=None, num_workers=4):
+    def __init__(self, transform, train_ds=None, val_ds=None, train_root=None, val_root=None, num_workers=4):
         self.num_workers = num_workers
         self.pin = torch.cuda.is_available()
 
@@ -11,17 +11,10 @@ class DataModule:
             self.train_ds = train_ds
             self.val_ds = val_ds
         elif train_root and val_root:
-            self.setup(train_root, val_root)
-
-    def _transforms(self):
-        return transforms.Compose([
-            transforms.ToTensor(), 
-            transforms.Normalize((-1.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-        ])
+            self.setup(train_root, val_root, transform)
 
     # setup using an on disk path
-    def setup(self, train_root, val_root):
-        transform = self._transforms()
+    def setup(self, train_root, val_root, transform):
         self.train_ds = datasets.ImageFolder(root=train_root, transform=transform)
         self.val_ds = datasets.ImageFolder(root=val_root, transform=transform)
         
