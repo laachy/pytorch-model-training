@@ -5,10 +5,10 @@ from Utils.image_utils import plot_confusion_matrix, image_grid
 from Data.data import DataModule
 
 class ResultHandler:  
-    def __init__(self, classes, tb=False, model_dir=None):
+    def __init__(self, dm, tb=False, model_dir=None):
         self.model_dir = model_dir
         self.tb = tb
-        self.classes = classes
+        self.dm = dm
         self.early_stopper = EarlyStopper(patience=5, min_delta=0)
 
         self.writer = {}
@@ -46,8 +46,8 @@ class ResultHandler:
     # for training / validation
     def handle_train(self, epoch):
         # compute metrics
-        t = self.r_train.compute_train(len(self.classes))
-        v = self.r_val.compute_train(len(self.classes))
+        t = self.r_train.compute_train(len(self.dm.classes()))
+        v = self.r_val.compute_train(len(self.dm.classes()))
 
         # log
         print(f"Epoch {epoch} | train {t["loss"]:.4f}/{t["acc"]:.2%} | val {v["loss"]:.4f}/{v["acc"]:.2%}")
@@ -92,9 +92,9 @@ class ResultHandler:
     def handle_test(self, model, loader):
         self.create_test_writer()
         for i, (inputs, _) in enumerate(loader):
-            inputs = DataModule.denorm(model.transforms(), inputs)
-            batch_preds = self.r_test.preds[i].tolist()
-            figure = image_grid(inputs, batch_preds, self.classes)
+            inputs = self.dm.denorm(inputs)
+            batch_preds = self.r_test.preds[i].argmax(dim=1).tolist()
+            figure = image_grid(inputs, batch_preds, self.dm.classes())
             self.writer["test"].add_figure("classification results (predictions)", figure, i)
 
     def close_writers(self):
@@ -103,11 +103,11 @@ class ResultHandler:
     
     def log_scalars(self, writer, results, epoch):
         writer.add_scalar("loss", results["loss"], epoch)
-        writer.add_scalar("acc", results["acc"], epoch)
-        writer.add_scalar("mae", results["mae"], epoch)
+        writer.add_scalar("accuracy", results["acc"], epoch)
+        writer.add_scalar("mean average precision", results["map"], epoch)
 
     def log_cm(self, writer, cm, epoch):
-        figure = plot_confusion_matrix(cm , self.classes)
+        figure = plot_confusion_matrix(cm , self.dm.classes())
         writer.add_figure("confusion matrix", figure, epoch)
 
     # can change this to take hparams from model to make less coupled with optuna
