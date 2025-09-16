@@ -51,15 +51,13 @@ class Trainer:
                 outputs = self.model(inputs)
                 loss = self.model.loss(outputs, targets)
 
-                preds = outputs.argmax(dim=1)
-
                 if train:
                     loss.backward()
                     self.optimiser.step()   # update the parameters (perform optimization)
 
-                result.update_batch(preds.detach().cpu(), targets.detach().cpu(), loss.item())
+                result.update_batch(outputs.detach().cpu(), targets.detach().cpu(), loss.item())
 
-                del inputs, targets, outputs, loss, preds
+                del inputs, targets, outputs, loss
         
         if self.handler:
             self.handler.end_epoch(result)
