@@ -34,20 +34,18 @@ class DataModule:
     def classes(self):
         return self.train_ds.classes
 
-    @classmethod
-    def find_normalise(cls, tfm):
+    def find_normalise(self, tfm):
         norms = []
         if hasattr(tfm, "transforms"): 
             for t in tfm.transforms:
-                norms.extend(cls.find_normalise(t))
+                norms.extend(self.find_normalise(t))
         if hasattr(tfm, "mean") and hasattr(tfm, "std"):
             norms.append(tfm)
 
         return norms
 
-    @classmethod
-    def denorm(cls, tfm, input):
-        norms = cls.find_normalise(tfm)
+    def denorm(self, input):
+        norms = self.find_normalise(self.tfm)
 
         mean = torch.tensor(norms[-1].mean)
         std = torch.tensor(norms[-1].std)
