@@ -1,65 +1,79 @@
-import optuna, torch
 from torch.utils.tensorboard import SummaryWriter
-from Data.early_stopper import EarlyStopper
-from Utils.image_utils import plot_confusion_matrix, image_grid
-from Data.data import DataModule
+from torchmetrics.classification import Accuracy
+from torchmetrics import MeanAbsoluteError, ConfusionMatrix
+import optuna, torch
 
-class ResultHandler:  
-    def __init__(self, classes, tb=False, model_dir=None):
-        self.model_dir = model_dir
+from Data.early_stopper import EarlyStopper
+
+class ResultHandler:
+    def __init__(self, n_classes, tb=False):
         self.tb = tb
-        self.classes = classes
+
+        self.acc_metric = Accuracy(task="multiclass", num_classes=n_classes)
+        self.conf_matrix = ConfusionMatrix(task="multiclass", num_classes=n_classes)
+        self.mae = MeanAbsoluteError()
+
         self.early_stopper = EarlyStopper(patience=5, min_delta=0)
 
-        self.writer = {}
-        
-    def set_experiment(self, model=None, trial=None):
         self.reset_experiment()
 
-        self.trial = trial
-        self.model = model
-        
-        # optional (for saving and logging) create writers
-        if self.model_dir:
-            if self.tb:
-                NAMES = ["train", "val"]
-                for name in NAMES:
-                    path = f"{self.model_dir}/tb/{name}/trial"
-                    if trial:
-                        path += f"_{trial.number}"
-                    self.writer[name] = SummaryWriter(path)
+    def reset_metrics(self):
+        self.acc_metric.reset()
+        self.conf_matrix.reset()
+        self.mae.reset()
+        self.running_loss = 0.0
 
     def reset_experiment(self):
         self.best_epoch = None
-        self.best_value = float("inf")
+        self.best_value = None
         self.early_stopper.reset()
+            
+    def set_expiriment(self, model=None, model_dir=None, trial=None):
+        self.trial = trial
+        self.model = model
+        
+        self.reset_experiment()
 
-    def end_epoch(self, result):
-        match result.name:     
-            case "train":
-                self.r_train = result
-            case "val":
-                self.r_val = result
-            case "test":
-                self.r_test = result
+        # optional (for saving and logging)
+        self.model = model
+        self.model_dir = model_dir
+        self.writer = None
+        if model_dir:
+            if self.tb:
+                self.writer = SummaryWriter(model_dir)
 
-    # for training / validation
-    def handle_train(self, epoch):
-        # compute metrics
-        t = self.r_train.compute_train(len(self.classes))
-        v = self.r_val.compute_train(len(self.classes))
+    def is_better(self, value):
+        if self.best_value is None:
+            return True
+        return value < self.best_value
 
-        # log
-        print(f"Epoch {epoch} | train {t["loss"]:.4f}/{t["acc"]:.2%} | val {v["loss"]:.4f}/{v["acc"]:.2%}")
+    def update(self, preds, targ, loss):
+        self.acc_metric.update(preds, targ)
+        self.conf_matrix.update(preds, targ)
+        self.mae.update(preds, targ)
+        self.running_loss += loss
+
+    def compute(self, size, train: bool):
+        acc = self.acc_metric.compute().item()
+        cm = self.conf_matrix.compute()
+        mae_val = self.mae.compute().item()
+        loss = self.running_loss / size
+
+        self.reset_metrics()
+
+        if train:
+            self.t_acc, self.t_cm, self.t_mae, self.t_loss = acc, cm, mae_val, loss
+        else:
+            self.v_acc, self.v_cm, self.v_mae, self.v_loss = acc, cm, mae_val, loss
+
+    def handle(self, epoch):
+        val_metric = self.v_loss
+
+        # logging
+        print(f"Epoch {epoch} | train {self.t_loss:.4f}/{self.t_acc:.2%} | val {self.v_loss:.4f}/{self.v_acc:.2%}")
         if self.writer:
-            # scalars
-            self.log_scalars(self.writer["train"], t, epoch)
-            self.log_scalars(self.writer["val"], v, epoch)
-            # conf matrix
-            self.log_cm(self.writer["train"], t["cm"], epoch)
-            self.log_cm(self.writer["val"], v["cm"], epoch)
+            self.tb_log_epoch(epoch)
 
-        val_metric = v["loss"]
         # stopping / pruning
         if self.early_stopper.early_stop(val_metric):
             return True
@@ -69,54 +83,38 @@ class ResultHandler:
                 raise optuna.TrialPruned()
 
         # saving
-        if self.best_value > val_metric:
+        if self.is_better(val_metric):
             self.best_value = val_metric
             self.best_epoch = epoch
 
-            if self.model and self.model_dir and self.trial:
-                best_path = f"{self.model_dir}/tb/train/trial_{self.trial.number}/epoch_{epoch}.ckpt"
-                ckpt = {
-                    "state_dict": self.model.state_dict(),
-                    "hparams": dict(self.trial.params)
-                }
-                torch.save(ckpt, best_path)
+            if self.model and self.model_dir:
+                best_path = f"{self.model_dir}/epoch_{epoch}.pt"
+                torch.save(self.model.state_dict(), best_path)
 
-                self.trial.set_user_attr("best_path", best_path)
+            if self.trial:
+                self.trial.set_user_attr("best_path", best_path) 
+        
 
-    # for testing
-    def create_test_writer(self):
-        if self.model_dir:
-            if self.tb:
-                self.writer["test"] = SummaryWriter(f"{self.model_dir}/tb/test/test")
-
-    def handle_test(self, model, loader):
-        self.create_test_writer()
-        for i, (inputs, _) in enumerate(loader):
-            inputs = DataModule.denorm(model.transforms(), inputs)
-            batch_preds = self.r_test.preds[i].tolist()
-            figure = image_grid(inputs, batch_preds, self.classes)
-            self.writer["test"].add_figure("classification results (predictions)", figure, i)
-
-    def close_writers(self):
-        for name in self.writer:
-            self.writer[name].close()
-    
-    def log_scalars(self, writer, results, epoch):
-        writer.add_scalar("loss", results["loss"], epoch)
-        writer.add_scalar("acc", results["acc"], epoch)
-        writer.add_scalar("mae", results["mae"], epoch)
-
-    def log_cm(self, writer, cm, epoch):
-        figure = plot_confusion_matrix(cm , self.classes)
-        writer.add_figure("confusion matrix", figure, epoch)
+    def tb_log_epoch(self, epoch):
+        self.writer.add_scalar("loss/train", self.t_loss, epoch)
+        self.writer.add_scalar("loss/val", self.v_loss, epoch)
+        self.writer.add_scalar("acc/train", self.t_acc, epoch)
+        self.writer.add_scalar("acc/val", self.v_acc, epoch)
 
     # can change this to take hparams from model to make less coupled with optuna
-    def log_experiment(self, input_data):
-        self.writer["train"].add_graph(self.model.to("cpu"), input_data)
-
+    def tb_log_hparams(self):
         hp = dict(self.trial.params)
+
         metrics = {
             "best_val_loss": self.best_value,
             "best_epoch": self.best_epoch
         }
-        self.writer["train"].add_hparams(hp, metrics)
+
+        self.writer.add_hparams(hp, metrics)
+
+    def close(self):
+        if self.writer:
+            self.writer.close()
+
+
+
