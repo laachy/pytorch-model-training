@@ -2,7 +2,7 @@ import optuna
 
 class Study:
     def __init__(self, study_name, direction="minimize", sampler=None):
-        self.pruner()
+        self.sh_pruner()
 
         self.study = optuna.create_study(
             study_name=study_name,
@@ -11,16 +11,19 @@ class Study:
             pruner=self.pruner
         )
         
-    def pruner(self):
-        self.pruner = optuna.pruners.MedianPruner(
-            n_startup_trials=2,   # don’t prune until we have some finished trials
-            n_warmup_steps=2,     # let each trial run a couple epochs before judging
-            interval_steps=1      # check every epoch
+    def sh_pruner(self):
+        self.pruner = optuna.pruners.SuccessiveHalvingPruner(
+            min_resource=2,          # min epochs before considering prune
+            reduction_factor=3,      # how aggressively to cut
+            min_early_stopping_rate=0
         )
     
     def optimise(self, experiment, n_trials=100, show_progress_bar=True):
-        self.study.optimize(experiment.train, n_trials=n_trials, show_progress_bar=show_progress_bar, callbacks=[experiment.save_best_model])  # run x times and choose new hparams
+        self.study.optimize(experiment.run, n_trials=n_trials, show_progress_bar=show_progress_bar, callbacks=[experiment.save_best_model])  # run x times and choose new hparams
     
+    
+
+
 
 '''
 WHAT OPTUNA NEEDS
@@ -33,7 +36,6 @@ A way to run an experiment: build model, train, evaluate
 import torch, gc, shutil
 from Data.handler import ResultHandler
 from Training.trainer import Trainer
-from config import CKPT_NAME
 
 class Experiment:
     def __init__(self, data_module, model_cls, model_path, epochs=50):
@@ -42,59 +44,46 @@ class Experiment:
         self.epochs = epochs
         self.model_path = model_path
 
-        self.output_size = len(self.dm.classes())
-        self.handler = ResultHandler(self.dm.classes(), tb=True, model_dir=model_path)
+        self.output_size = self.dm.output_size()
+
+        self.handler = ResultHandler(self.output_size, tb=True)
         self.trainer = Trainer(self.handler)
 
     def save_best_model(self, study, trial):
         if study.best_trial.number == trial.number:
             best_path = trial.user_attrs.get("best_path")
-            dst = f"{self.model_path}/{CKPT_NAME}"
+            dst = f"{self.model_path}/best_model.pt"
 
             shutil.copyfile(best_path, dst)
 
-    def load_best_model(self):
-        ckpt = torch.load(f"{self.model_path}/{CKPT_NAME}")
-        hp = ckpt.get("hparams", {})
-        hp.pop("batch_size")
-
-        model = self.model_cls(len(self.dm.classes()), **hp)
-        state = ckpt["state_dict"]
-        model.load_state_dict(state, strict=True)
-
-        return model
-
-    def train(self, trial=None):
-        try:            
+    def run(self, trial=None):
+        try:
+            tb_dir=f"{self.model_path}/tb/trial" 
+            if trial:
+                tb_dir=f"{tb_dir}_{trial.number}"
+                
             model, batch_size = self.model_cls.build_for_experiment(self.output_size, trial)    # create model
 
             # data retrieval and setup
             train_loader = self.dm.train_dataloader(batch_size)
             val_loader = self.dm.val_dataloader(batch_size)
 
-            self.handler.set_experiment(model, trial)
+            self.handler.set_expiriment(model, tb_dir, trial)
             self.trainer.fit(model, train_loader, val_loader, self.epochs)  # train model
 
             if trial:
-                images, labels = next(iter(val_loader))
-                self.handler.log_experiment(images)
+                self.handler.tb_log_hparams()
 
             return self.handler.best_value
         finally:
             # cleanup
-            self.handler.close_writers()
+            self.handler.close()
             del train_loader, val_loader, model
             
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
-    
-    def test(self):
-        model = self.load_best_model()
-        test_loader = self.dm.test_dataloader(batch_size=32)
-
-        self.trainer.test(model, test_loader)
 
 
         
