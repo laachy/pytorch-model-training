@@ -39,10 +39,9 @@ def image_grid(images, preds, class_names):
     #fig.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0, hspace=0)
     axes = np.atleast_1d(axes).ravel()
     for i, ax in enumerate(axes):
-        if i >= n:
-            ax.axis('off')
-            continue
         ax.set_axis_off()
+        if i >= n:
+            continue
 
         ax.imshow(imgs[i].numpy(), vmin=0, vmax=1)
         title = class_names[preds[i]]
