@@ -43,7 +43,7 @@ class Experiment:
         self.model_path = model_path
 
         self.output_size = len(self.dm.classes())
-        self.handler = ResultHandler(self.dm.classes(), tb=True, model_dir=model_path)
+        self.handler = ResultHandler(self.dm, tb=True, model_dir=model_path)
         self.trainer = Trainer(self.handler)
 
     def save_best_model(self, study, trial):
