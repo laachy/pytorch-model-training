@@ -75,12 +75,12 @@ class Experiment:
             self.handler.set_experiment(model, trial)
             self.trainer.fit(model, train_loader, val_loader, self.epochs)  # train model
 
-            if trial:
-                images, labels = next(iter(val_loader))
-                self.handler.log_experiment(images)
-
             return self.handler.best_value
         finally:
+            if trial:
+                images, labels = next(iter(val_loader))
+                self.handler.log_experiment(images, self.trainer.device)
+
             # cleanup
             self.handler.close_writers()
             del train_loader, val_loader, model
