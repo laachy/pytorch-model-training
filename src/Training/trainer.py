@@ -23,7 +23,6 @@ class Trainer:
         self.optimiser = model.configure_optimisers()
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimiser, T_max=max_epochs)
         
-        if self.handler.prof: self.handler.prof.start() # hardware metrics
         for epoch in range(max_epochs):
             self.fit_epoch(train_loader, mode="train")
             self.fit_epoch(val_loader, mode="val")
@@ -31,9 +30,9 @@ class Trainer:
             self.scheduler.step()
 
             # logging
-            if self.handler and self.handler.handle_train(epoch) is True:
-                break
-        if self.handler.prof: self.handler.prof.stop()   # hardware metrics
+            if self.handler:
+                if self.handler.handle_train(epoch) == True:
+                    return
 
     def fit_epoch(self, loader, mode):
         train = False
@@ -42,24 +41,23 @@ class Trainer:
 
         self.model.train(train) # eval if false
 
-        with torch.profiler.record_function(mode): 
-            with torch.set_grad_enabled(train): # enabled only during training
-                result = Result(mode, len(loader))
-                for inputs, targets in loader:
-                    inputs, targets = inputs.to(self.device, non_blocking=True), targets.to(self.device, non_blocking=True)
-                    if train:
-                        self.optimiser.zero_grad(set_to_none=True)  # ensure reset gradient
+        with torch.set_grad_enabled(train): # enabled only during training
+            result = Result(mode, len(loader))
+            for inputs, targets in loader:
+                inputs, targets = inputs.to(self.device, non_blocking=True), targets.to(self.device, non_blocking=True, dtype=torch.long)
+                if train:
+                    self.optimiser.zero_grad(set_to_none=True)  # ensure reset gradient
 
-                    outputs = self.model(inputs)
-                    loss = self.model.loss(outputs, targets)
+                outputs = self.model(inputs)
+                loss = self.model.loss(outputs, targets)
 
-                    if train:
-                        loss.backward()
-                        self.optimiser.step()   # update the parameters (perform optimization)
+                if train:
+                    loss.backward()
+                    self.optimiser.step()   # update the parameters (perform optimization)
 
-                    if self.handler.prof: self.handler.prof.step()
+                result.update_batch(outputs.detach().cpu(), targets.detach().cpu(), loss.item())
 
-                    result.update_batch(outputs.detach().cpu(), targets.detach().cpu(), loss.item())
-            
-            if self.handler:
-                self.handler.end_epoch(result)
+                del inputs, targets, outputs, loss
+        
+        if self.handler:
+            self.handler.end_epoch(result)

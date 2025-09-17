@@ -1,10 +1,8 @@
 import optuna, torch
-from torch.profiler import profile, tensorboard_trace_handler, ProfilerActivity
 from torch.utils.tensorboard import SummaryWriter
 from Data.early_stopper import EarlyStopper
 from Utils.image_utils import plot_confusion_matrix, image_grid
 from Data.data import DataModule
-
 
 class ResultHandler:  
     def __init__(self, dm, tb=False, model_dir=None):
@@ -13,7 +11,6 @@ class ResultHandler:
         self.dm = dm
         self.early_stopper = EarlyStopper(patience=5, min_delta=0)
 
-        self.prof = None
         self.writer = {}
         
     def set_experiment(self, model=None, trial=None):
@@ -25,20 +22,12 @@ class ResultHandler:
         # optional (for saving and logging) create writers
         if self.model_dir:
             if self.tb:
-                end = "trial"
-                if trial: end = f"{end}_{trial.number}"
-                path = f"{self.model_dir}/tb"
-
-                self.prof = profile(
-                    activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-                    schedule=torch.profiler.schedule(wait=0, warmup=1, active=2, repeat=1),
-                    on_trace_ready=tensorboard_trace_handler(f"{path}/profile/{end}"),
-                    record_shapes=True, profile_memory=True
-                )
                 NAMES = ["train", "val"]
-                for name in NAMES:  
-                    self.writer[name] = SummaryWriter(f"{path}/{name}/{end}")
-                    
+                for name in NAMES:
+                    path = f"{self.model_dir}/tb/{name}/trial"
+                    if trial:
+                        path += f"_{trial.number}"
+                    self.writer[name] = SummaryWriter(path)
 
     def reset_experiment(self):
         self.best_epoch = None
@@ -111,7 +100,7 @@ class ResultHandler:
     def close_writers(self):
         for name in self.writer:
             self.writer[name].close()
-
+    
     def log_scalars(self, writer, results, epoch):
         writer.add_scalar("loss", results["loss"], epoch)
         writer.add_scalar("accuracy", results["acc"], epoch)
