@@ -4,6 +4,21 @@ from Data.early_stopper import EarlyStopper
 from Utils.image_utils import plot_confusion_matrix, image_grid
 from Data.data import DataModule
 
+def _mib(b): return b/(1024**2)
+def _gib(b): return b/(1024**3)
+def compute_gpu_usage():
+    free, total = torch.cuda.mem_get_info()
+    used = total - free
+    out = {
+        "alloc": _mib(torch.cuda.memory_allocated()),
+        "res": _mib(torch.cuda.memory_reserved()),
+        "free": _gib(free),
+        "total": _gib(total),
+        "used": _gib(total - free)
+    }
+    torch.cuda.reset_peak_memory_stats()
+    return out
+
 class ResultHandler:  
     def __init__(self, dm, tb=False, model_dir=None):
         self.model_dir = model_dir
@@ -12,7 +27,7 @@ class ResultHandler:
         self.early_stopper = EarlyStopper(patience=5, min_delta=0)
 
         self.writer = {}
-        
+
     def set_experiment(self, model=None, trial=None):
         self.reset_experiment()
 
@@ -106,12 +121,25 @@ class ResultHandler:
         writer.add_scalar("accuracy", results["acc"], epoch)
         writer.add_scalar("mean average precision", results["map"], epoch)
 
+    def log_gpu_mem(self, step):
+        r = compute_gpu_usage()
+        print(f"GPU peak usage | {r["used"]:.1f}GiB/{r["total"]:.1f}GiB used | alloc {r["alloc"]:.0f}MiB | reserved {r["res"]:.0f}MiB")
+        
+        writer = self.writer["train"]
+        writer.add_scalar("GPU peak alloc MiB", r["alloc"], step)
+        writer.add_scalar("GPU peak reserved MiB", r["res"], step)
+        writer.add_scalar("GPU used GiB", r["used"], step)
+        
+
     def log_cm(self, writer, cm, epoch):
         figure = plot_confusion_matrix(cm , self.dm.classes())
         writer.add_figure("confusion matrix", figure, epoch)
 
     # can change this to take hparams from model to make less coupled with optuna
-    def log_experiment(self, input_data):
+    def log_experiment(self, input_data, device):
+        if device.type == "cuda":
+            self.log_gpu_mem(self.trial.number)
+
         self.writer["train"].add_graph(self.model.to("cpu"), input_data)
 
         hp = dict(self.trial.params)
