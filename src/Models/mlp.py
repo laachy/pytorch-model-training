@@ -46,7 +46,7 @@ class MLP(nn.Module):
             batch_size = 64     # default
             return cls(output_size), batch_size
 
-        batch_size = trial.suggest_int("batch_size", 32, 128, step=32)
+        batch_size = trial.suggest_categorical("batch_size", [16, 32, 64, 128, 256])
 
         depth = trial.suggest_int("depth", 1, 6)
         width = trial.suggest_categorical("width", [64, 128, 256, 512, 1028])

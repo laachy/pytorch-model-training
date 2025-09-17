@@ -65,12 +65,13 @@ class VGG(nn.Module):
     @classmethod
     def build_for_experiment(cls, output_size, trial=None):
         if not trial:
-            batch_size = 32     # default
+            batch_size = 16     # default
             return cls(output_size), batch_size
 
-        batch_size = trial.suggest_int("batch_size", 16, 64, step=16)
+        batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
+
         
-        fc_width = trial.suggest_categorical("fc_width", [512, 1024, 2048, 4096])
+        fc_width = trial.suggest_categorical("fc_width", [4096])    # can change later if needed but stay to original arch
         dropout = trial.suggest_float("dropout", 0.0, 0.5)
         lr = trial.suggest_float("lr", 5e-4, 3e-3, log=True)
         weight_decay  = trial.suggest_float("weight_decay", 1e-6, 5e-4, log=True)
