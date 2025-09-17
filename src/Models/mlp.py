@@ -49,7 +49,7 @@ class MLP(nn.Module):
         batch_size = trial.suggest_categorical("batch_size", [16, 32, 64, 128, 256])
 
         depth = trial.suggest_int("depth", 1, 6)
-        width = trial.suggest_categorical("width", [64, 128, 256, 512, 1028])
+        width = trial.suggest_categorical("width", [64, 128, 256, 512, 1024, 2048])
         funnel_factor = trial.suggest_categorical("funnel_factor", [1, 2, 3])
         dropout = trial.suggest_float("dropout", 0.0, 0.5)
         lr = trial.suggest_float("lr", 5e-4, 3e-3, log=True)
