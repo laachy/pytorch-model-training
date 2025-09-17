@@ -21,7 +21,7 @@ def main():
     #train_ds = CIFAR10(os.getcwd(), train=True, download=True, transform=transform)
     #val_ds = CIFAR10(os.getcwd(), train=False, download=True, transform=transform)
     #dm = DataModule(train_ds=train_ds, val_ds=val_ds)
-    dm = DataModule(model_cls.transforms(), num_workers=1, train_root=TRAIN_ROOT, val_root=VAL_ROOT, test_root=TEST_ROOT)
+    dm = DataModule(model_cls.transforms(), num_workers=4, train_root=TRAIN_ROOT, val_root=VAL_ROOT, test_root=TEST_ROOT)
 
     experiment = Experiment(dm, model_cls, model_path, MAX_EPOCHS)
     # training (if new model name with no ckpt)

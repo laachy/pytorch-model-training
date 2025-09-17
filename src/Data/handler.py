@@ -45,7 +45,7 @@ class ResultHandler:
                     self.writer[name] = SummaryWriter(path)
 
     def reset_experiment(self):
-        self.best_epoch = None
+        self.best_epoch = -1
         self.best_value = float("inf")
         self.early_stopper.reset()
 
@@ -121,14 +121,13 @@ class ResultHandler:
         writer.add_scalar("accuracy", results["acc"], epoch)
         writer.add_scalar("mean average precision", results["map"], epoch)
 
-    def log_gpu_mem(self, step):
+    def log_gpu_mem(self, writer, step):
         r = compute_gpu_usage()
         print(f"GPU peak usage | {r["used"]:.1f}GiB/{r["total"]:.1f}GiB used | alloc {r["alloc"]:.0f}MiB | reserved {r["res"]:.0f}MiB")
-        
-        writer = self.writer["train"]
+
         writer.add_scalar("GPU peak alloc MiB", r["alloc"], step)
         writer.add_scalar("GPU peak reserved MiB", r["res"], step)
-        writer.add_scalar("GPU used GiB", r["used"], step)
+        writer.add_scalar("GPU peak used GiB", r["used"], step)
         
 
     def log_cm(self, writer, cm, epoch):
@@ -136,11 +135,9 @@ class ResultHandler:
         writer.add_figure("confusion matrix", figure, epoch)
 
     # can change this to take hparams from model to make less coupled with optuna
-    def log_experiment(self, input_data, device):
+    def log_experiment(self, device):
         if device.type == "cuda":
-            self.log_gpu_mem(self.trial.number)
-
-        self.writer["train"].add_graph(self.model.to("cpu"), input_data)
+            self.log_gpu_mem(self.writer["train"], self.trial.number)
 
         hp = dict(self.trial.params)
         metrics = {
@@ -148,3 +145,9 @@ class ResultHandler:
             "best_epoch": self.best_epoch
         }
         self.writer["train"].add_hparams(hp, metrics)
+
+    # new writer for this (only when best model in experiment so far)
+    def log_graph(self, input_data):
+        writer = SummaryWriter(f"{self.model_dir}/tb/graph/trial_{self.trial.number}")
+        writer.add_graph(self.model.to("cpu"), input_data)
+        writer.close()

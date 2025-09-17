@@ -49,8 +49,13 @@ class Experiment:
     def save_best_model(self, study, trial):
         if study.best_trial.number == trial.number:
             best_path = trial.user_attrs.get("best_path")
-            dst = f"{self.model_path}/{CKPT_NAME}"
+            if not best_path:
+                return
 
+            images, labels = next(iter(self.dm.val_dataloader(1)))
+            self.handler.log_graph(images)
+
+            dst = f"{self.model_path}/{CKPT_NAME}"
             shutil.copyfile(best_path, dst)
 
     def load_best_model(self):
@@ -76,10 +81,12 @@ class Experiment:
             self.trainer.fit(model, train_loader, val_loader, self.epochs)  # train model
 
             return self.handler.best_value
+        except torch.cuda.OutOfMemoryError as e:
+            print(f"[OOM]: {e}. Skipping.")
+            return float("inf")
         finally:
             if trial:
-                images, labels = next(iter(val_loader))
-                self.handler.log_experiment(images, self.trainer.device)
+                self.handler.log_experiment(self.trainer.device)
 
             # cleanup
             self.handler.close_writers()
