@@ -70,11 +70,10 @@ class VGG(nn.Module):
 
         batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
 
-        
         fc_width = trial.suggest_categorical("fc_width", [4096])    # can change later if needed but stay to original arch
         dropout = trial.suggest_float("dropout", 0.0, 0.5)
-        lr = trial.suggest_float("lr", 5e-4, 3e-3, log=True)
-        weight_decay  = trial.suggest_float("weight_decay", 1e-6, 5e-4, log=True)
+        lr = trial.suggest_float("lr", 5e-7, 3e-3, log=True)
+        weight_decay  = trial.suggest_float("weight_decay", 1e-6, 3e-4, log=True)
     
         return cls(output_size, fc_width, dropout, lr, weight_decay), batch_size
 

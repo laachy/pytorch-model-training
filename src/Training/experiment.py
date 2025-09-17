@@ -2,13 +2,13 @@ import optuna
 
 class Study:
     def __init__(self, study_name, direction="minimize", sampler=None):
-        self.pruner()
+        #self.pruner()
 
         self.study = optuna.create_study(
             study_name=study_name,
             direction=direction, 
-            sampler=sampler or optuna.samplers.TPESampler(seed=42), # sampler defines how hparams are chosen
-            pruner=self.pruner
+            sampler=sampler or optuna.samplers.TPESampler() # sampler defines how hparams are chosen
+            #pruner=self.pruner
         )
         
     def pruner(self):
@@ -34,6 +34,7 @@ import torch, gc, shutil
 from Data.handler import ResultHandler
 from Training.trainer import Trainer
 from config import CKPT_NAME
+from Utils.model_utils import str_to_activation, str_to_optimiser
 
 class Experiment:
     def __init__(self, data_module, model_cls, model_path, epochs=50):
@@ -62,6 +63,11 @@ class Experiment:
         ckpt = torch.load(f"{self.model_path}/{CKPT_NAME}")
         hp = ckpt.get("hparams", {})
         hp.pop("batch_size")
+        hp["activation_fn"] = str_to_activation(hp["activation_fn"])
+        hp["optimiser"] = str_to_optimiser(hp["optimiser"])
+
+        if hasattr(self.model_cls, 'extract'):
+            hp = self.model_cls.extract(hp)
 
         model = self.model_cls(len(self.dm.classes()), **hp)
         state = ckpt["state_dict"]
@@ -83,7 +89,7 @@ class Experiment:
             return self.handler.best_value
         except torch.cuda.OutOfMemoryError as e:
             print(f"[OOM]: {e}. Skipping.")
-            return float("inf")
+            raise optuna.TrialPruned()
         finally:
             if trial:
                 self.handler.log_experiment(self.trainer.device)
