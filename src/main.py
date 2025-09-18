@@ -12,7 +12,7 @@ from config import *
 
 
 def main():
-    model_cls = VGG
+    model_cls = MLP
 
     model_name = input("enter new or existing model: ")
     model_path = f"{MODEL_DIR}/{model_name}"

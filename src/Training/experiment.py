@@ -63,8 +63,8 @@ class Experiment:
         ckpt = torch.load(f"{self.model_path}/{CKPT_NAME}")
         hp = ckpt.get("hparams", {})
         hp.pop("batch_size")
-        hp["activation_fn"] = str_to_activation(hp["activation_fn"])
-        hp["optimiser"] = str_to_optimiser(hp["optimiser"])
+        if "activation_fn" in hp: hp["activation_fn"] = str_to_activation(hp["activation_fn"])
+        if "optimiser" in hp: hp["optimiser"] = str_to_optimiser(hp["optimiser"])
 
         model = self.model_cls(len(self.dm.classes()), **hp)
         state = ckpt["state_dict"]
