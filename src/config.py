@@ -6,4 +6,4 @@ MODEL_DIR = "../model_data"
 CKPT_NAME = "best_model.ckpt"
 
 MAX_EPOCHS = 50
-N_TRIALS = 100
+N_TRIALS = 500

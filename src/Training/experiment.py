@@ -2,19 +2,19 @@ import optuna
 
 class Study:
     def __init__(self, study_name, direction="minimize", sampler=None):
-        #self.pruner()
+        self.pruner()
 
         self.study = optuna.create_study(
             study_name=study_name,
             direction=direction, 
-            sampler=sampler or optuna.samplers.TPESampler() # sampler defines how hparams are chosen
-            #pruner=self.pruner
+            sampler=sampler or optuna.samplers.TPESampler(n_startup_trials=15, multivariate=True, group=True, seed=0), # sampler defines how hparams are chosen
+            pruner=self.pruner
         )
         
     def pruner(self):
         self.pruner = optuna.pruners.MedianPruner(
-            n_startup_trials=2,   # don’t prune until we have some finished trials
-            n_warmup_steps=2,     # let each trial run a couple epochs before judging
+            n_startup_trials=5,   # don’t prune until we have some finished trials
+            n_warmup_steps=0,     # let each trial run a couple epochs before judging
             interval_steps=1      # check every epoch
         )
     
@@ -65,9 +65,6 @@ class Experiment:
         hp.pop("batch_size")
         hp["activation_fn"] = str_to_activation(hp["activation_fn"])
         hp["optimiser"] = str_to_optimiser(hp["optimiser"])
-
-        if hasattr(self.model_cls, 'extract'):
-            hp = self.model_cls.extract(hp)
 
         model = self.model_cls(len(self.dm.classes()), **hp)
         state = ckpt["state_dict"]

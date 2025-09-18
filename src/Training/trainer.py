@@ -24,7 +24,7 @@ class Trainer:
     def fit(self, model, train_loader, val_loader, max_epochs):
         self.model = model.to(self.device)
         self.optimiser = model.configure_optimisers()
-        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.optimiser, max_lr=model.lr, total_steps=max_epochs*len(train_loader))
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimiser, T_max=max_epochs*len(train_loader))
 
         for epoch in range(max_epochs):
             self.fit_epoch(train_loader, mode="train")
