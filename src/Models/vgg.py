@@ -71,8 +71,10 @@ class VGG(nn.Module):
             return cls(output_size), batch_size
 
         batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
-
         fc_width = trial.suggest_categorical("fc_width", [4096])    # can change later if needed but stay to original arch
+
+        #kernel_size = trial.suggest_int("kernel_size", 1, 6, step=1)
+        #padding = trial.suggest_int("padding", 1, 5, step=1)
 
         dropout = trial.suggest_float("dropout", 0.0, 0.5)
         lr = trial.suggest_float("lr", 1e-7, 1e-1, log=True)
@@ -80,6 +82,8 @@ class VGG(nn.Module):
 
         activation_fn = str_to_activation(trial.suggest_categorical('activation_fn', ['relu', 'sigmoid', 'tanh']))
         optimiser = str_to_optimiser(trial.suggest_categorical("optimiser", ["Adam", "AdamW", "SGD"]))
+
+        batch_norm = trial.suggest_categorical("batch_norm", [True, False])
     
-        return cls(output_size, fc_width, dropout, lr, weight_decay, activation_fn, optimiser), batch_size
+        return cls(output_size, fc_width, dropout, lr, weight_decay, activation_fn, optimiser, batch_norm), batch_size
 

@@ -43,9 +43,9 @@ class TrainedVGG(torch.nn.Module):
             batch_size = 32     # default
             return cls(output_size), batch_size
 
-        batch_size = trial.suggest_int("batch_size", 16, 64, step=16)
+        batch_size = trial.suggest_categorical("batch_size", [16, 32, 64])
 
-        lr = trial.suggest_float("lr", 5e-7, 1e-3, log=True)
-        weight_decay  = trial.suggest_float("weight_decay", 1e-6, 5e-4, log=True)
+        lr = trial.suggest_float("lr", 1e-8, 1e-1, log=True)
+        weight_decay  = trial.suggest_float("weight_decay", 1e-8, 1e-2, log=True)
     
         return cls(output_size, lr, weight_decay), batch_size
